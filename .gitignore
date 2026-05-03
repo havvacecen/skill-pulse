@@ -1,0 +1,22 @@
+# ── Virtual environment ───────────────────────────────────────────────────────
+.venv/
+
+# ── Python cache ──────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+
+# ── Test & tooling cache ──────────────────────────────────────────────────────
+.pytest_cache/
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
+.env
+
+# ── OS metadata ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Personal notes (private, never push) ─────────────────────────────────────
+docs/personal/*
+
+# ── Raw data (uncomment if files become large or contain real data) ───────────
+# data/raw/*.json
