@@ -51,5 +51,33 @@ Test result:
 
 Interview explanation:
 - The ingestion step is the entry point of the pipeline. Its only job is to load raw data — no cleaning, no transformation. This separation means I can swap the source (file today, API later) without touching anything downstream.
-- I used `pathlib.Path` instead of raw strings because it handles cross-platform path differences cleanly.
+
+
+---
+
+## 2026-05-04
+
+Today I worked on:
+- `src/core/pipeline/cleaning.py` — normalization layer (lowercase, strip, collapse whitespace)
+- `src/core/pipeline/skill_extraction.py` — keyword-based enrichment (python, sql, airflow, etc.)
+- `src/core/analytics/skill_counts.py` — aggregation layer (frequency counting & sorting)
+- `tests/adapters/core/` — full test coverage for all three new modules
+- `.gitignore` — added IDE and build artifact exclusions
+
+What it does:
+- `cleaning.py`: transforms messy raw strings into consistent lowercase text.
+- `skill_extraction.py`: identifies technical keywords in titles and descriptions.
+- `skill_counts.py`: calculates which skills are most in-demand across the dataset.
+
+Input:
+- `list[dict]` (raw job records from ingestion)
+
+Output:
+- `list[dict]` (enriched job records with `extracted_skills` key)
+- `list[dict]` (sorted skill frequency statistics)
+
+Interview explanation:
+- I implemented a "pure function" approach where each transformation step returns a brand-new object instead of mutating the input. This prevents bugs where one part of the pipeline accidentally changes data for another part.
+- The separation of cleaning from extraction ensures that keywords are always matched against a predictable, normalized format.
+- I used simple string containment for extraction to keep the logic lightweight and readable before moving to more complex NLP methods.
 
