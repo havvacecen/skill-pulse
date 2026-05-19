@@ -87,37 +87,55 @@ Interview explanation:
 ## 2026-05-19
 
 Today I worked on:
-- `src/adapters/api/__init__.py` — package marker for the API adapter
-- `src/adapters/api/main.py` — FastAPI app instance; registers all routers
-- `src/adapters/api/routes/__init__.py` — package marker for the routes sub-package
-- `src/adapters/api/routes/health.py` — `GET /health` endpoint
-- `src/adapters/api/routes/skills.py` — `GET /skills` endpoint
-- `tests/adapters/api/test_health.py` — 2 tests for the health endpoint
-- `tests/adapters/api/test_skills.py` — 8 tests for the skills endpoint
-- `requirements.txt` — activated `fastapi`, `uvicorn[standard]`, `httpx`
+- `src/adapters/api/__init__.py` - package marker for the API adapter
+- `src/adapters/api/main.py` - FastAPI app entry point
+- `src/adapters/api/routes/__init__.py` - package marker for API routes
+- `src/adapters/api/routes/health.py` - health-check route
+- `src/adapters/api/routes/skills.py` - skills route that runs the pipeline and returns skill counts
+- `tests/adapters/api/__init__.py` - package marker for API tests
+- `tests/adapters/api/test_health.py` - tests for `GET /health`
+- `tests/adapters/api/test_skills.py` - tests for `GET /skills`
+- `requirements.txt` - API and test dependencies: `pytest`, `fastapi`, `uvicorn[standard]`, and `httpx`
 
 What each piece does:
-- `main.py`: Creates the FastAPI `app` object and wires up the two routers. This is the single entry point uvicorn points at.
-- `health.py`: Returns `{"status": "ok"}` with no I/O. Used to confirm the server is alive.
-- `skills.py`: Runs the full pipeline on every request — load → clean → extract → count — and returns the top N skills as JSON. Path to the data file is resolved relative to the project root using `Path(__file__).parents[5]` so it works regardless of where uvicorn is started.
+- `main.py`: Creates the FastAPI `app` object and registers the health and skills routers.
+- `health.py`: Defines `GET /health`, a simple endpoint that returns `{"status": "ok"}` with no file access or pipeline work.
+- `skills.py`: Defines `GET /skills`, loads sample jobs, cleans them, extracts skills, counts them, sorts them, and returns the top results.
+- `test_health.py`: Checks that `/health` returns HTTP 200 and the expected JSON body.
+- `test_skills.py`: Checks that `/skills` returns HTTP 200, includes a `skills` key, returns items with `skill` and `count`, respects `top_n`, rejects invalid `top_n` values, and sorts counts from highest to lowest.
+
+API endpoints:
+- `GET /health` - no query parameters
+- `GET /skills` - optional `top_n` query parameter, default `10`
+- `GET /skills?top_n=3` - returns at most 3 skill results
 
 Input:
-- `GET /health` — no parameters
-- `GET /skills?top_n=<int>` — optional `top_n` query param (1–100, default 10)
+- `/health` - no input
+- `/skills` - optional `top_n` integer from 1 to 100
+- `data/raw/sample_jobs.json` - sample job records used by the skills endpoint
 
 Output:
-- `/health` → `{"status": "ok"}`
-- `/skills` → `{"skills": [{"skill": "python", "count": 8}, ...]}`
+- `/health` -> `{"status": "ok"}`
+- `/skills` -> `{"skills": [{"skill": "python", "count": 8}, ...]}`
 
 Edge cases handled:
-- `top_n < 1` or `top_n > 100` → FastAPI returns HTTP 422 automatically (via `Query(ge=1, le=100)`)
-- Sample data file missing → HTTP 500 with a descriptive message
-- Jobs with no extracted skills → handled safely by downstream modules
+- `top_n=0` -> HTTP 422 from FastAPI validation
+- `top_n=101` -> HTTP 422 from FastAPI validation
+- Missing sample data file -> HTTP 500 with a clear error message
+
+Debugging/recovery work:
+- The first focused API test run showed that `/health` passed, but `/skills` returned HTTP 500.
+- The error message showed that the API was looking for `data/raw/sample_jobs.json` one folder above the real project root.
+- Root cause: `_PROJECT_ROOT` in `skills.py` used `Path(__file__).resolve().parents[5]`, which resolved to `SkillPulse_Project` instead of `skill-pulse`.
+- Smallest safe patch: changed it to `parents[4]`, so the API resolves the data path to the actual repository root.
 
 Test result:
-- `10 passed` ✅ (2 health + 8 skills)
+- `.\.venv\Scripts\python.exe -m pytest tests/adapters/api`
+- `10 passed in 0.25s`
 
 Interview explanation:
-- I separated the app wiring (`main.py`) from the endpoint logic (`routes/`) so each concern lives in its own file. Adding a new endpoint means creating a new file and one `include_router()` line — nothing else changes.
-- The `/skills` endpoint deliberately re-runs the pipeline on every call. There is no caching in Phase 1; this keeps the code simple and transparent. Caching would be a Phase 2 optimization once the data source grows.
-- Using FastAPI's `Query(ge=1, le=100)` means the framework validates the input and returns a standard 422 error automatically — I didn't have to write any manual validation code.
+- I built the API as a thin adapter around the existing pipeline. FastAPI handles HTTP requests, but the core logic still lives in ingestion, cleaning, extraction, and analytics modules.
+- The `/health` endpoint is intentionally simple because it only proves that the API process is running.
+- The `/skills` endpoint reuses the existing pipeline instead of duplicating business logic inside the route.
+- `Query(ge=1, le=100)` keeps validation beginner-readable and lets FastAPI return standard 422 errors automatically.
+- The recovery work was a path-resolution bug, not a pipeline bug. The endpoint failed because it could not find the sample data file, so the safest fix was to correct the project-root calculation only.

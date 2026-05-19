@@ -39,7 +39,7 @@ from src.core.analytics.skill_counts import get_skill_counts
 
 # Resolved once at import time so the path is always correct regardless of
 # where uvicorn is started from.
-_PROJECT_ROOT = Path(__file__).resolve().parents[5]  # up to skill-pulse/
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]  # up to skill-pulse/
 _SAMPLE_DATA_PATH = _PROJECT_ROOT / "data" / "raw" / "sample_jobs.json"
 
 # ---------------------------------------------------------------------------
