@@ -5,8 +5,9 @@ pytest
 # pydantic
 
 # ── Phase 6: API ──────────────────────────────────────────────────────────────
-# fastapi
-# uvicorn
+fastapi
+uvicorn[standard]
+httpx          # required by FastAPI's TestClient
 
 # ── Phase 7: Dashboard ────────────────────────────────────────────────────────
 # streamlit
