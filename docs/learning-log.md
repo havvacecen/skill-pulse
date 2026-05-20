@@ -139,3 +139,59 @@ Interview explanation:
 - The `/skills` endpoint reuses the existing pipeline instead of duplicating business logic inside the route.
 - `Query(ge=1, le=100)` keeps validation beginner-readable and lets FastAPI return standard 422 errors automatically.
 - The recovery work was a path-resolution bug, not a pipeline bug. The endpoint failed because it could not find the sample data file, so the safest fix was to correct the project-root calculation only.
+
+
+---
+
+## 2026-05-20
+
+Today I worked on:
+- `dashboard/app.py` - first minimal Streamlit dashboard entry point
+- `requirements.txt` - enabled the `streamlit` dependency for the dashboard phase
+
+What each piece does:
+- `app.py`: Creates a simple Streamlit page titled `SkillPulse Dashboard`.
+-           Loads the current sample job data from `data/raw/sample_jobs.json`.
+-           Reuses the existing pipeline functions: `load_jobs`, `clean_job`, `enrich_job_with_skills`, and `get_skill_counts`.
+-           Shows the top extracted skills as a table and a bar chart.
+-           Adds simple filters for role, source, and posted date range.
+- `requirements.txt`: Activates Streamlit so the dashboard can be run locally.
+
+Dashboard functionality:
+- Page title: `SkillPulse Dashboard`
+- Short project description explaining that the dashboard shows skills from the sample job dataset
+- Role filter based on job titles in the sample data
+- Source filter limited to `Sample data`, because Phase 1 does not use real LinkedIn, Kariyer.net, RemoteOK, or Wellfound data yet
+- Posted date range filter based on the `posted_at` field
+- Top skills table
+- Top skills bar chart
+- Empty-state message when the selected filters return no skills
+
+API/dashboard integration work:
+- No API code was changed.
+- The dashboard reuses the same pipeline logic that powers the `/skills` API endpoint.
+- This keeps the dashboard and API consistent without adding database logic or duplicating skill-counting logic.
+
+Input:
+- `data/raw/sample_jobs.json` - the current Phase 1 sample/mock job dataset
+- Streamlit filter selections: role, source, and posted date range
+
+Output:
+- A Streamlit dashboard page showing filtered top skill counts
+- A table of records like `{"skill": "python", "count": 12}`
+- A bar chart using the same skill count results
+
+Test result:
+- `.\.venv\Scripts\python.exe -m py_compile dashboard\app.py`
+- passed
+- `.\.venv\Scripts\python.exe -m pytest`
+- `34 passed in 0.32s`
+
+How to run locally:
+- `.\.venv\Scripts\python.exe -m streamlit run dashboard/app.py`
+
+Interview explanation:
+- I added the first dashboard as a thin presentation layer over the existing pipeline. The dashboard does not clean data, extract skills, or count skills by itself; it calls the modules that already do those jobs.
+- This keeps the project modular: ingestion, cleaning, extraction, analytics, API, and dashboard each have their own responsibility.
+- I kept the source filter honest for Phase 1 by showing only `Sample data`. Even though the mock records contain source-like values, the product should not present them as real integrations before real ingestion exists.
+- Streamlit is useful here because it gives a quick product view of the pipeline output without adding frontend complexity.

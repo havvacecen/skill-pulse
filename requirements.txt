@@ -10,7 +10,7 @@ uvicorn[standard]
 httpx          # required by FastAPI's TestClient
 
 # ── Phase 7: Dashboard ────────────────────────────────────────────────────────
-# streamlit
+streamlit
 
 # ── Phase 3+: Pipeline extras ─────────────────────────────────────────────────
 # pyyaml
