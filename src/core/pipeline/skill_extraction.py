@@ -7,20 +7,49 @@ This module works on cleaned job dictionaries. It searches for predefined
 keywords in the job title and description to produce a list of found skills.
 """
 
-# Simple hardcoded list of skills for Phase 1.
-# These must be lowercase to match the normalized text from cleaning.py.
-SKILL_KEYWORDS = [
-    "python",
-    "sql",
-    "airflow",
-    "spark",
-    "kafka",
-    "aws",
-    "docker",
-    "dbt",
-    "snowflake",
-    "pandas"
-]
+from pathlib import Path
+
+
+SKILLS_CONFIG_PATH = Path(__file__).resolve().parents[3] / "configs" / "skills.yaml"
+
+
+def load_skill_keywords(config_path: Path = SKILLS_CONFIG_PATH) -> list[str]:
+    """
+    Load skill keywords from configs/skills.yaml.
+
+    Input:
+        config_path (Path): Path to a simple YAML file with a 'skills:' list.
+
+    Output:
+        list[str]: Skill keywords in the same order as the config file.
+
+    Core Logic:
+        1. Read the config file line by line.
+        2. Keep only list items written as '- skill_name'.
+        3. Normalize each skill to lowercase for matching cleaned text.
+
+    Edge Cases:
+        - Empty lines and comments are ignored.
+        - Missing config file raises FileNotFoundError.
+    """
+    skill_keywords = []
+
+    with config_path.open("r", encoding="utf-8") as config_file:
+        for line in config_file:
+            clean_line = line.strip()
+
+            if not clean_line or clean_line.startswith("#"):
+                continue
+
+            if clean_line.startswith("- "):
+                skill = clean_line.removeprefix("- ").strip().lower()
+                skill_keywords.append(skill)
+
+    return skill_keywords
+
+
+# Loaded from configs/skills.yaml so the skill list can change without editing code.
+SKILL_KEYWORDS = load_skill_keywords()
 
 
 def extract_skills_from_text(text: str) -> list[str]:

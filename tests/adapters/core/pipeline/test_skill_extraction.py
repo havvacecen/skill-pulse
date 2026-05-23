@@ -6,7 +6,31 @@ Ensures keywords are found in job fields and output is consistent.
 """
 
 import pytest
-from src.core.pipeline.skill_extraction import extract_skills_from_text, enrich_job_with_skills
+from src.core.pipeline.skill_extraction import (
+    extract_skills_from_text,
+    enrich_job_with_skills,
+    load_skill_keywords,
+)
+
+
+# ---------------------------------------------------------------------------
+# load_skill_keywords Tests
+# ---------------------------------------------------------------------------
+
+def test_load_skill_keywords_from_config(tmp_path):
+    """Verify skill keywords are loaded from a simple YAML config file."""
+    config_file = tmp_path / "skills.yaml"
+    config_file.write_text(
+        "skills:\n"
+        "  - Python\n"
+        "  - SQL\n"
+        "  - dbt\n",
+        encoding="utf-8",
+    )
+
+    skills = load_skill_keywords(config_file)
+
+    assert skills == ["python", "sql", "dbt"]
 
 
 # ---------------------------------------------------------------------------
