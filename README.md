@@ -2,76 +2,238 @@
 
 > **"Which skills does the job market actually demand?"**
 
-SkillPulse is a modular data engineering platform that ingests job postings from multiple sources, extracts technical skill signals, and surfaces job-market intelligence through an API and dashboard.
+SkillPulse is a modular data engineering project that loads sample job postings, cleans and enriches them, extracts technical skill signals, and serves job-market insights through a FastAPI API and a Streamlit dashboard.
 
 ---
 
 ## What It Does
 
-- Collects job listings from sources like LinkedIn, Kariyer.net, and RemoteOK
-- Cleans and normalizes raw posting data
-- Extracts skill/technology mentions from job descriptions
-- Aggregates skill trends by role, source, and time period
-- Serves results through a FastAPI backend and a Streamlit dashboard
+- Loads sample job records from `data/raw/sample_jobs.json`
+- Cleans and normalizes raw job fields
+- Extracts skill mentions from job titles and descriptions
+- Counts the most frequently requested skills
+- Exposes skill counts through FastAPI
+- Displays filtered skill insights in Streamlit
 
 ---
 
-## Phase 1 Goal
+## Architecture Flow
 
-> Validate the pipeline design using **sample/mock data** before connecting real sources.
-> No real scrapers. No Kafka. No Spark. Just a clean, testable data flow from JSON → skills → trends.
+```text
+data/raw/sample_jobs.json
+        |
+        v
+Ingestion
+load raw job records
+        |
+        v
+Cleaning
+normalize job fields
+        |
+        v
+Skill Extraction
+add extracted_skills to each job
+        |
+        v
+Analytics
+count and sort extracted skills
+        |
+        +--------------------+
+        |                    |
+        v                    v
+FastAPI API           Streamlit Dashboard
+/health, /skills      filters, metrics, table, chart
+```
+
+The API and dashboard both reuse the same core pipeline logic. The dashboard currently runs the pipeline directly in memory; it does not call the API yet.
 
 ---
 
 ## Project Structure
 
-```
+```text
 skill-pulse/
-│
-├── src/
-│   ├── core/                   # Domain logic: schemas, constants, shared utilities
-│   │   ├── common/             # Project-wide constants and path definitions
-│   │   ├── schemas/            # Raw and processed job data models (Pydantic)
-│   │   └── pipeline/           # Cleaning, normalization, and skill extraction logic
-│   │
-│   └── adapters/               # Everything that touches the outside world
-│       ├── ingestion/          # Extractors that read from sample files or external sources
-│       ├── storage/            # Writers that persist processed data to the database
-│       └── api/                # FastAPI app: routes, services, and response schemas
-│
-├── data/
-│   └── raw/                    # Raw input files; sample_jobs.json lives here in Phase 1
-│
+|
 ├── configs/
-│   └── skills.yaml             # Skill keyword list used by the extraction step
-│
-├── dashboard/                  # Streamlit app: pages, charts, and API client
-│
-├── tests/                      # Mirrors src/ structure; one test module per source module
-│
-├── docs/                       # Architecture diagrams, data-flow notes, API contract
-│
-├── .env.example                # Required environment variables with placeholder values
-└── requirements.txt            # Python dependencies
+│   └── skills.yaml
+|
+├── dashboard/
+│   └── app.py
+|
+├── data/
+│   └── raw/
+│       └── sample_jobs.json
+|
+├── docs/
+│   ├── learning-log.md
+|
+├── src/
+│   ├── adapters/
+│   │   ├── api/
+│   │   │   ├── main.py
+│   │   │   └── routes/
+│   │   │       ├── health.py
+│   │   │       └── skills.py
+│   │   └── ingestion/
+│   │       └── ingestion.py
+│   │
+│   └── core/
+│       ├── analytics/
+│       │   └── skill_counts.py
+│       └── pipeline/
+│           ├── cleaning.py
+│           └── skill_extraction.py
+|
+├── tests/
+│   └── adapters/
+│       ├── api/
+│       ├── core/
+│       └── ingestion/
+|
+├── .env.example
+├── conftest.py
+├── README.md
+└── requirements.txt
 ```
 
 ---
 
-## Folder Responsibilities (one sentence each)
+## Pipeline Explanation
 
-| Folder | Responsibility |
+| Stage | Responsibility |
 |---|---|
-| `src/core/common` | Holds project-wide constants (source names, seniority levels) and `pathlib`-based path definitions that never change at runtime. |
-| `src/core/schemas` | Defines the shape of data at each pipeline stage so that bad records are caught early with Pydantic validation. |
-| `src/core/pipeline` | Contains all transformation logic — text normalization, cleaning rules, and keyword-based skill extraction. |
-| `src/adapters/ingestion` | Reads raw job data from any source (sample file today, real APIs later) and returns a uniform list of raw job dicts. |
-| `src/adapters/storage` | Writes cleaned and enriched job records to the database, keeping persistence concerns separate from business logic. |
-| `src/adapters/api` | Exposes pipeline outputs through versioned FastAPI endpoints so the dashboard and external tools stay decoupled. |
-| `data/raw` | Stores unmodified source data; nothing in this folder is ever written by the pipeline — only read. |
-| `configs/` | Holds YAML-based configuration (skill lists, source definitions) that can change without touching Python code. |
-| `dashboard/` | Presents skill trends, role comparisons, and remote ratios to end users through a Streamlit interface. |
-| `tests/` | Mirrors `src/` so every module has a corresponding test file that can be run independently. |
-| `docs/` | Stores architecture decisions, data-flow diagrams, and the API contract for reference and interview prep. |
+| Ingestion | Reads `data/raw/sample_jobs.json` and returns raw job dictionaries. |
+| Cleaning | Normalizes job records so downstream processing receives consistent text. |
+| Skill extraction | Finds configured skill keywords in cleaned job titles and descriptions, then adds `extracted_skills`. |
+| Analytics | Counts extracted skills and returns sorted frequency results. |
+| API | Runs the pipeline in memory and returns skill data through FastAPI endpoints. |
+| Dashboard | Runs the same pipeline in memory and shows filters, metric cards, a table, and a chart in Streamlit. |
+
+This separation keeps the project modular: each stage has one clear job and can be tested independently.
+
+---
+
+## Run Locally
+
+Create a virtual environment:
+
+```powershell
+python -m venv .venv
+```
+
+Activate it on Windows PowerShell:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Install dependencies:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+Run tests:
+
+```powershell
+python -m pytest
+```
+
+Run the FastAPI app:
+
+```powershell
+python -m uvicorn src.adapters.api.main:app --reload
+```
+
+Open the API docs:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+Run the Streamlit dashboard in a second terminal:
+
+```powershell
+python -m streamlit run dashboard/app.py
+```
+
+---
+
+## API Endpoints
+
+### `GET /health`
+
+Checks whether the API server is running.
+
+Example response:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### `GET /skills`
+
+Runs the current in-memory pipeline and returns the top skill counts from the sample job dataset.
+
+Query parameters:
+
+| Parameter | Type | Default | Rules | Description |
+|---|---:|---:|---|---|
+| `top_n` | integer | `10` | `1` to `100` | Number of top skills to return. |
+
+Example request:
+
+```text
+GET /skills?top_n=3
+```
+
+Example response:
+
+```json
+{
+  "skills": [
+    {
+      "skill": "python",
+      "count": 12
+    },
+    {
+      "skill": "sql",
+      "count": 11
+    },
+    {
+      "skill": "aws",
+      "count": 8
+    }
+  ]
+}
+```
+
+Invalid `top_n` values such as `0` or `101` return FastAPI validation errors.
+
+---
+
+## Dashboard
+
+The Streamlit dashboard reuses the existing pipeline directly:
+
+```text
+load_jobs -> clean_job -> enrich_job_with_skills -> get_skill_counts
+```
+
+Current dashboard features:
+
+- Role filter
+- Source filter
+- Remote / Hybrid / Onsite filter
+- Seniority filter
+- Posted date range filter
+- Top-N slider
+- Total jobs metric
+- Unique skills metric
+- Remote ratio metric
+- Top skills table and bar chart
 
 ---
 
@@ -80,22 +242,17 @@ skill-pulse/
 | Layer | Technology |
 |---|---|
 | Language | Python |
-| Backend API | FastAPI |
+| API | FastAPI |
 | Dashboard | Streamlit |
-| Database | PostgreSQL / Supabase |
-| Orchestration | Airflow *(Phase 2+)* |
-| Streaming | Kafka + Spark *(Phase 3+)* |
+| Testing | pytest |
+| Data source | Local sample JSON |
 
 ---
 
-## Data Strategy
+## Current Data Strategy
 
-| Phase | Data Source | Purpose |
-|---|---|---|
-| Phase 1 | `data/raw/sample_jobs.json` | Validate pipeline design with static mock data |
-| Phase 2 | `mock_job_producer.py` | Simulate ingestion without a real scraper |
-| Phase 3 | RemoteOK API, public job feeds | Real data from live sources |
+| Data Source | Purpose |
+|---|---|
+| `data/raw/sample_jobs.json` | Validate the end-to-end pipeline with static sample job records before adding real ingestion sources. |
 
----
-
-*This README reflects the Phase 1 structure. It will be updated as the project evolves.*
+This README reflects the current implemented project state.
