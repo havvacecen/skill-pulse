@@ -195,3 +195,189 @@ Interview explanation:
 - This keeps the project modular: ingestion, cleaning, extraction, analytics, API, and dashboard each have their own responsibility.
 - I kept the source filter honest for Phase 1 by showing only `Sample data`. Even though the mock records contain source-like values, the product should not present them as real integrations before real ingestion exists.
 - Streamlit is useful here because it gives a quick product view of the pipeline output without adding frontend complexity.
+
+
+---
+
+## 2026-05-23
+
+Today I worked on:
+- `configs/skills.yaml` - new configuration file for skill keywords
+- `src/core/pipeline/skill_extraction.py` - refactored skill extraction to load keywords from config
+- `tests/adapters/core/pipeline/test_skill_extraction.py` - added coverage for loading skill keywords from config
+- `dashboard/app.py` - polished the Streamlit dashboard with more filters, metrics, and a Top-N slider
+- `README.md` - updated the project documentation to match the current implementation
+- `src/adapters/ingestion/remoteok.py` - added a minimal RemoteOK ingestion adapter
+- `tests/adapters/ingestion/test_remoteok.py` - added tests for RemoteOK mapping and request failure behavior
+
+What each piece does:
+- `skills.yaml`: Stores the tracked skill keywords outside Python code, including `python`, `sql`, `airflow`, `spark`, `kafka`, `aws`, `docker`, `dbt`, `snowflake`, and `pandas`.
+- `skill_extraction.py`: Loads skill keywords from `configs/skills.yaml`, then keeps the same simple keyword matching behavior against cleaned title and description text.
+- `test_skill_extraction.py`: Verifies that a simple YAML-style skill config is loaded in order and normalized to lowercase.
+- `dashboard/app.py`: Still reuses `load_jobs`, `clean_job`, `enrich_job_with_skills`, and `get_skill_counts`, but now adds a Top-N slider, Remote / Hybrid / Onsite filter, Seniority filter, and summary metric cards.
+- `README.md`: Explains the current architecture flow, project structure, pipeline stages, local setup commands, API endpoints, dashboard behavior, and current data strategy.
+- `remoteok.py`: Fetches jobs from the public RemoteOK API and maps them into the same raw job dictionary shape used by `sample_jobs.json`.
+- `test_remoteok.py`: Tests RemoteOK normalization and fetch behavior without making live network calls.
+
+Input:
+- `configs/skills.yaml` - a small YAML-style list of skill keywords used by skill extraction
+- `data/raw/sample_jobs.json` - still used by the existing local sample pipeline, API, and dashboard
+- `https://remoteok.com/api` - optional real RemoteOK source used by the new ingestion adapter
+- Streamlit filter selections: role, source, remote type, seniority, posted date range, and Top-N count
+
+Output:
+- `list[str]` skill keywords loaded from configuration
+- `list[dict]` enriched job records with `extracted_skills`
+- `list[dict]` top skill count records such as `{"skill": "python", "count": 12}`
+- `list[dict]` RemoteOK jobs normalized to the raw SkillPulse shape:
+  `id`, `title`, `company`, `description`, `location`, `remote_type`, `source`, `source_url`, `posted_at`, `employment_type`, `seniority`, `tags`
+- A Streamlit dashboard with filters, metric cards, top skills table, and bar chart
+- README documentation that reflects the current implemented project state
+
+Architecture changes:
+- Skill extraction is now configuration-driven: changing tracked skills can happen in `configs/skills.yaml` instead of editing Python code.
+- Ingestion now has two source paths:
+  - local sample ingestion through `load_jobs`
+  - RemoteOK ingestion through `fetch_remoteok_jobs`
+- The API and dashboard still reuse the existing pipeline and were not changed to call RemoteOK directly.
+- No database, Kafka, Spark, Airflow, Redis, or orchestration logic was added.
+
+Dashboard functionality:
+- Top-N slider controls how many skill rows appear in the table and chart.
+- Remote / Hybrid / Onsite filter uses the existing `remote_type` field.
+- Seniority filter is built dynamically from available job data.
+- Metric cards show total filtered jobs, unique skills, and remote ratio.
+- Empty states are still handled safely when date range or filters return no skill results.
+
+RemoteOK ingestion mapping:
+- `position` or `title` -> `title`
+- `company` -> `company`
+- `description` -> `description`
+- `location` -> `location`, with `"Remote"` as a fallback
+- `url` -> `source_url`
+- `date`, `epoch`, or `date_epoch` -> `posted_at`
+- `tags` -> `tags`
+- `source` is always set to `"remoteok"`
+- `remote_type` is always set to `"remote"`
+- `seniority` is lightly inferred from the title using simple words like `junior`, `entry`, `senior`, `sr.`, and `lead`
+
+Edge cases handled:
+- Empty skill extraction input still returns an empty list.
+- Missing or commented lines in `skills.yaml` are ignored by the loader.
+- Missing RemoteOK fields fall back to safe defaults where possible.
+- RemoteOK metadata rows are skipped.
+- RemoteOK network and HTTP errors are wrapped in a clear `RuntimeError`.
+- RemoteOK tests use fake clients, so the test suite does not depend on the live API.
+- Dashboard remote ratio returns `0%` safely when no jobs match the filters.
+
+Test result:
+- `.\.venv\Scripts\python.exe -m pytest tests/adapters/core/pipeline/test_skill_extraction.py`
+- `8 passed`
+- `.\.venv\Scripts\python.exe -m pytest tests/adapters/ingestion`
+- `9 passed`
+- `.\.venv\Scripts\python.exe -m py_compile dashboard\app.py`
+- passed
+- `.\.venv\Scripts\python.exe -m pytest`
+- `38 passed`
+
+How to run locally:
+- API: `.\.venv\Scripts\python.exe -m uvicorn src.adapters.api.main:app --reload`
+- Dashboard: `.\.venv\Scripts\python.exe -m streamlit run dashboard/app.py`
+- Tests: `.\.venv\Scripts\python.exe -m pytest`
+- Manual RemoteOK check: `.\.venv\Scripts\python.exe -c "from src.adapters.ingestion.remoteok import fetch_remoteok_jobs; print(fetch_remoteok_jobs(limit=2))"`
+
+Interview explanation:
+- I moved skill keywords from Python into `configs/skills.yaml` so the extraction step is easier to adjust without changing business logic.
+- I kept skill extraction intentionally simple: it still uses readable keyword containment instead of NLP, embeddings, or complex matching.
+- I improved the dashboard as a presentation layer only. It still reuses the existing pipeline and does not duplicate ingestion, cleaning, extraction, or analytics logic.
+- I added RemoteOK as a separate ingestion adapter so real job data can enter the same raw job format as the sample data without changing downstream pipeline stages.
+- I tested RemoteOK ingestion with fake HTTP clients because unit tests should be deterministic and should not fail because an external API is slow, unavailable, or changed.
+- The architecture remains modular: ingestion brings data in, cleaning normalizes it, skill extraction enriches it, analytics counts it, and API/dashboard present the result.
+
+
+---
+
+## 2026-05-24
+
+Today I worked on:
+- `src/adapters/api/routes/skills.py` - made the skills endpoint source-aware
+- `dashboard/app.py` - made the dashboard Source filter switch between sample data and RemoteOK
+- `src/adapters/ingestion/remoteok.py` - added simple technical-role filtering for RemoteOK jobs
+- `configs/skills.yaml` - expanded the existing config-driven skill list for real RemoteOK data
+- `tests/adapters/api/test_skills.py` - added source parameter tests for the API
+- `tests/adapters/ingestion/test_remoteok.py` - added tests for RemoteOK relevance filtering
+
+What each piece does:
+- `skills.py`: Adds a `source` query parameter to `GET /skills`. The default is still `sample`, and `remoteok` uses the existing RemoteOK ingestion adapter. Invalid sources return HTTP 400 with a clear message.
+- `dashboard/app.py`: Shows `Sample data` and `RemoteOK` in the Source dropdown. The selected source is loaded first, then the same cleaning, skill extraction, and analytics flow runs.
+- `remoteok.py`: Keeps RemoteOK ingestion responsible for fetching, filtering, and normalizing RemoteOK records. It now excludes obviously unrelated roles such as design, marketing, sales, support, customer success, recruiter, and product manager.
+- `skills.yaml`: Keeps skill extraction configuration-driven, but expands the tracked skills beyond the original sample-focused list. The list now covers data engineering, backend/software engineering, cloud/devops, and data science/ML skills.
+- `test_skills.py`: Verifies `source=sample`, mocked `source=remoteok`, and invalid source behavior without making live network calls.
+- `test_remoteok.py`: Verifies technical RemoteOK jobs are kept, unrelated jobs are skipped, and filtering happens before the requested limit is applied.
+
+Input:
+- API query parameters:
+  - `source=sample` or `source=remoteok`
+  - `top_n`, still limited from 1 to 100
+- Dashboard Source filter:
+  - `Sample data`
+  - `RemoteOK`
+- `data/raw/sample_jobs.json` for the reliable local demo source
+- `https://remoteok.com/api` for the experimental live RemoteOK source
+- `configs/skills.yaml` for the configured skill keywords used by extraction
+
+Output:
+- `/skills?source=sample` returns skill counts from the local sample JSON file.
+- `/skills?source=remoteok` returns skill counts from filtered RemoteOK jobs.
+- The dashboard table, metrics, and chart update based on the selected source.
+- RemoteOK records still use the same normalized raw job dictionary shape:
+  `id`, `title`, `company`, `description`, `location`, `remote_type`, `source`, `source_url`, `posted_at`, `employment_type`, `seniority`, `tags`
+
+Architecture changes:
+- The API and dashboard are now source-aware at the adapter/presentation layer.
+- The pipeline flow stays the same for both sources:
+  ingestion -> cleaning -> skill extraction -> analytics
+- Source selection does not add database logic, orchestration, Kafka, Spark, Redis, Airflow, or Supabase.
+- RemoteOK relevance filtering belongs inside the RemoteOK ingestion adapter because this is where external raw records first enter SkillPulse.
+- Sample data remains the reliable demo source. RemoteOK is available as an experimental live source, so its results can change depending on the public API response.
+
+RemoteOK relevance filtering:
+- The filter searches simple text from the RemoteOK title, tags, and description.
+- It keeps technical/data/software-related roles such as data engineer, analytics engineer, ML engineer, backend engineer, software engineer, platform engineer, DevOps engineer, data scientist, Python developer, and full stack developer.
+- It excludes clearly unrelated roles such as designer, marketing, sales, support, customer success, recruiter, and product manager.
+- The logic is intentionally simple keyword matching so it is easy to read, test, and explain.
+
+Skill configuration update:
+- The original config-driven extraction approach stayed the same.
+- The skill list now includes more practical real-data skills, such as `javascript`, `typescript`, `node`, `react`, `java`, `go`, `gcp`, `azure`, `kubernetes`, `terraform`, `numpy`, `pytorch`, `tensorflow`, and `machine learning`.
+- Vague business keywords were avoided so irrelevant RemoteOK jobs are not treated as useful just because they contain generic words.
+
+Edge cases handled:
+- Missing sample file still returns a clear API error.
+- Invalid source values return HTTP 400.
+- RemoteOK network or HTTP failures return a clear upstream-source error through the API.
+- RemoteOK metadata rows are skipped.
+- Unrelated RemoteOK jobs are skipped before applying the requested result limit.
+- Tests use fake clients or monkeypatching, so they do not depend on the live RemoteOK API.
+
+Test result:
+- `.\.venv\Scripts\python.exe -m py_compile src\adapters\ingestion\remoteok.py src\adapters\api\routes\skills.py dashboard\app.py`
+- passed
+- `.\.venv\Scripts\python.exe -m pytest tests/adapters/ingestion/test_remoteok.py tests/adapters/api/test_skills.py`
+- `16 passed`
+- `.\.venv\Scripts\python.exe -m pytest`
+- `43 passed`
+
+How to run locally:
+- API: `.\.venv\Scripts\python.exe -m uvicorn src.adapters.api.main:app --reload`
+- Sample API check: `http://127.0.0.1:8000/skills?source=sample&top_n=10`
+- RemoteOK API check: `http://127.0.0.1:8000/skills?source=remoteok&top_n=10`
+- Invalid source check: `http://127.0.0.1:8000/skills?source=linkedin`
+- Dashboard: `.\.venv\Scripts\python.exe -m streamlit run dashboard/app.py`
+
+Interview explanation:
+- I made source selection an adapter-level concern. The API and dashboard choose the source, but the core pipeline still receives raw job dictionaries and runs the same cleaning, extraction, and analytics steps.
+- I kept sample data as the reliable demo path because it is local, stable, and deterministic. RemoteOK is useful for real-world practice, but it is an experimental live source because the public API can change or return different jobs each time.
+- I added RemoteOK filtering inside ingestion because unrelated external jobs should be removed before they affect analytics. This keeps the dashboard focused on technical/data/software market intelligence.
+- I expanded `skills.yaml` instead of hardcoding new skills in Python. That keeps skill extraction easy to adjust without changing pipeline code.
+- I tested RemoteOK behavior with fake data so the test suite remains fast and reliable even when the live RemoteOK API is unavailable.

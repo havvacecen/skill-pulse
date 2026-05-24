@@ -1,11 +1,40 @@
 skills:
+  # Data engineering
   - python
   - sql
   - airflow
   - spark
   - kafka
-  - aws
-  - docker
   - dbt
   - snowflake
   - pandas
+  - numpy
+
+  # Backend / software engineering
+  - javascript
+  - typescript
+  - node
+  - react
+  - java
+  - go
+  - django
+  - fastapi
+  - postgresql
+  - mysql
+  - mongodb
+
+  # Cloud / devops
+  - aws
+  - gcp
+  - azure
+  - docker
+  - kubernetes
+  - terraform
+  - linux
+  - github actions
+
+  # Data science / ML
+  - pytorch
+  - tensorflow
+  - scikit-learn
+  - machine learning

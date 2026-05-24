@@ -10,7 +10,11 @@ sample payloads so the test suite stays fast and deterministic.
 import httpx
 import pytest
 
-from src.adapters.ingestion.remoteok import fetch_remoteok_jobs, normalize_remoteok_job
+from src.adapters.ingestion.remoteok import (
+    fetch_remoteok_jobs,
+    is_relevant_remoteok_job,
+    normalize_remoteok_job,
+)
 
 
 class FakeResponse:
@@ -78,9 +82,16 @@ def test_normalize_remoteok_job_maps_expected_fields():
 
 
 def test_fetch_remoteok_jobs_skips_metadata_and_applies_limit():
-    """RemoteOK metadata rows should be skipped before applying the limit."""
+    """Metadata and unrelated rows should be skipped before applying the limit."""
     payload = [
         {"legal": "metadata row"},
+        {
+            "id": 99,
+            "position": "Product Designer",
+            "company": "Design Co",
+            "description": "Design landing pages",
+            "tags": ["design"],
+        },
         {
             "id": 1,
             "position": "Python Engineer",
@@ -103,6 +114,28 @@ def test_fetch_remoteok_jobs_skips_metadata_and_applies_limit():
     assert len(jobs) == 1
     assert jobs[0]["id"] == "remoteok_1"
     assert jobs[0]["source"] == "remoteok"
+
+
+def test_is_relevant_remoteok_job_keeps_technical_roles():
+    """Technical/data/software roles should be kept by the RemoteOK filter."""
+    remoteok_job = {
+        "position": "Analytics Engineer",
+        "description": "Build dbt models with SQL and Python.",
+        "tags": ["data", "dbt"],
+    }
+
+    assert is_relevant_remoteok_job(remoteok_job) is True
+
+
+def test_is_relevant_remoteok_job_excludes_unrelated_roles():
+    """Non-technical roles should be excluded before normalization."""
+    remoteok_job = {
+        "position": "Customer Success Manager",
+        "description": "Help customers onboard and renew contracts.",
+        "tags": ["support", "sales"],
+    }
+
+    assert is_relevant_remoteok_job(remoteok_job) is False
 
 
 def test_fetch_remoteok_jobs_raises_runtime_error_on_network_failure():

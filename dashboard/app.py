@@ -1,31 +1,33 @@
 """
-Minimal Streamlit dashboard for SkillPulse.
+Streamlit dashboard for SkillPulse.
 
+The Source filter switches between sample data and RemoteOK data.
 This app reuses the existing in-memory pipeline:
-load sample jobs -> clean jobs -> extract skills -> count top skills.
+load selected source jobs -> clean jobs -> extract skills -> count top skills.
 
 Run locally:
     streamlit run dashboard/app.py
 """
 
 from datetime import date
-from pathlib import Path
 
 import streamlit as st
 
-from src.adapters.ingestion.ingestion import load_jobs
+from src.adapters.api.routes.skills import load_raw_jobs_for_source
 from src.core.analytics.skill_counts import get_skill_counts
 from src.core.pipeline.cleaning import clean_job
 from src.core.pipeline.skill_extraction import enrich_job_with_skills
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-SAMPLE_DATA_PATH = PROJECT_ROOT / "data" / "raw" / "sample_jobs.json"
+SOURCE_OPTIONS = {
+    "Sample data": "sample",
+    "RemoteOK": "remoteok",
+}
 
 
-def load_processed_jobs() -> list[dict]:
-    """Load sample jobs and run the existing cleaning + skill extraction steps."""
-    raw_jobs = load_jobs(str(SAMPLE_DATA_PATH))
+def load_processed_jobs(source: str) -> list[dict]:
+    """Load selected source jobs and run the existing cleaning + skill extraction steps."""
+    raw_jobs = load_raw_jobs_for_source(source)
     cleaned_jobs = [clean_job(job) for job in raw_jobs]
     return [enrich_job_with_skills(job) for job in cleaned_jobs]
 
@@ -45,7 +47,6 @@ def parse_posted_date(job: dict) -> date | None:
 def filter_jobs(
     jobs: list[dict],
     selected_role: str,
-    selected_source: str,
     selected_remote_type: str,
     selected_seniority: str,
     selected_dates: tuple[date, date],
@@ -57,7 +58,6 @@ def filter_jobs(
         posted_date = parse_posted_date(job)
 
         role_matches = selected_role == "All roles" or job.get("title") == selected_role
-        source_matches = selected_source == "Sample data"
         remote_type_matches = (
             selected_remote_type == "All work types"
             or job.get("remote_type") == selected_remote_type
@@ -70,7 +70,6 @@ def filter_jobs(
 
         if (
             role_matches
-            and source_matches
             and remote_type_matches
             and seniority_matches
             and date_matches
@@ -94,13 +93,19 @@ st.set_page_config(page_title="SkillPulse Dashboard", layout="wide")
 st.title("SkillPulse Dashboard")
 st.write(
     "A minimal dashboard that shows which technical skills appear most often "
-    "in the current sample job dataset."
+    "in the selected job dataset."
 )
 
-jobs = load_processed_jobs()
+selected_source_label = st.selectbox("Source", list(SOURCE_OPTIONS.keys()))
+selected_source = SOURCE_OPTIONS[selected_source_label]
+
+try:
+    jobs = load_processed_jobs(selected_source)
+except (FileNotFoundError, RuntimeError, ValueError) as exc:
+    st.error(f"Could not load {selected_source_label}: {exc}")
+    st.stop()
 
 roles = ["All roles"] + sorted({job["title"] for job in jobs if job.get("title")})
-sources = ["Sample data"]
 remote_types = ["All work types"] + sorted(
     {job["remote_type"] for job in jobs if job.get("remote_type")}
 )
@@ -110,11 +115,14 @@ seniority_levels = ["All seniority levels"] + sorted(
 posted_dates = [parse_posted_date(job) for job in jobs]
 posted_dates = [posted_date for posted_date in posted_dates if posted_date is not None]
 
-min_date = min(posted_dates)
-max_date = max(posted_dates)
+if posted_dates:
+    min_date = min(posted_dates)
+    max_date = max(posted_dates)
+else:
+    min_date = date.today()
+    max_date = date.today()
 
 selected_role = st.selectbox("Role", roles)
-selected_source = st.selectbox("Source", sources)
 selected_remote_type = st.selectbox("Remote / Hybrid / Onsite", remote_types)
 selected_seniority = st.selectbox("Seniority", seniority_levels)
 top_n = st.slider("Top skills to show", min_value=3, max_value=10, value=5)
@@ -131,7 +139,6 @@ else:
     filtered_jobs = filter_jobs(
         jobs,
         selected_role,
-        selected_source,
         selected_remote_type,
         selected_seniority,
         selected_dates,

@@ -1,8 +1,9 @@
 """
 remoteok.py
 -----------
-Fetches jobs from the public RemoteOK API and maps them into SkillPulse's
-raw job dictionary shape.
+Fetches jobs from the public RemoteOK API, filters them to technical/data/
+software-related roles, and maps them into SkillPulse's raw job dictionary
+shape.
 
 This module only handles ingestion. It does not clean text, extract skills,
 count skills, call the database, or update the dashboard/API.
@@ -14,6 +15,37 @@ import httpx
 
 
 REMOTEOK_API_URL = "https://remoteok.com/api"
+
+RELEVANT_ROLE_KEYWORDS = (
+    "data engineer",
+    "data analyst",
+    "analytics engineer",
+    "ml engineer",
+    "machine learning engineer",
+    "backend engineer",
+    "back end engineer",
+    "software engineer",
+    "platform engineer",
+    "devops engineer",
+    "data scientist",
+    "python developer",
+    "full stack developer",
+    "fullstack developer",
+    "developer",
+    "engineer",
+)
+
+UNRELATED_ROLE_KEYWORDS = (
+    "designer",
+    "design",
+    "marketing",
+    "sales",
+    "support",
+    "customer success",
+    "recruiter",
+    "recruiting",
+    "product manager",
+)
 
 
 def format_remoteok_date(job: dict) -> str | None:
@@ -56,6 +88,40 @@ def infer_seniority(title: str) -> str:
         return "senior"
 
     return ""
+
+
+def is_relevant_remoteok_job(remoteok_job: dict) -> bool:
+    """
+    Decide whether a RemoteOK job belongs in SkillPulse's technical scope.
+
+    Input:
+        remoteok_job (dict): One raw RemoteOK job record.
+
+    Output:
+        bool: True when the job looks technical/data/software-related.
+
+    Core logic:
+        1. Search title, tags, and description together.
+        2. Exclude clearly unrelated roles first.
+        3. Keep jobs with simple technical role signals.
+
+    Edge cases:
+        - Missing fields become empty strings.
+        - Non-list tags are ignored.
+    """
+    title = remoteok_job.get("position") or remoteok_job.get("title") or ""
+    description = remoteok_job.get("description") or ""
+    tags = remoteok_job.get("tags") or []
+
+    if not isinstance(tags, list):
+        tags = []
+
+    searchable_text = f"{title} {' '.join(tags)} {description}".lower()
+
+    if any(keyword in searchable_text for keyword in UNRELATED_ROLE_KEYWORDS):
+        return False
+
+    return any(keyword in searchable_text for keyword in RELEVANT_ROLE_KEYWORDS)
 
 
 def normalize_remoteok_job(remoteok_job: dict) -> dict:
@@ -132,6 +198,9 @@ def fetch_remoteok_jobs(limit: int | None = None, client: httpx.Client | None = 
             continue
 
         if "id" not in item or ("position" not in item and "title" not in item):
+            continue
+
+        if not is_relevant_remoteok_job(item):
             continue
 
         normalized_jobs.append(normalize_remoteok_job(item))

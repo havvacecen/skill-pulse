@@ -10,6 +10,7 @@ Tests cover the happy path, the top_n query parameter, and the valid range.
 from fastapi.testclient import TestClient
 
 from src.adapters.api.main import app
+from src.adapters.api.routes import skills as skills_route
 
 client = TestClient(app)
 
@@ -48,6 +49,50 @@ def test_skills_top_n_limits_results():
     assert response.status_code == 200
     skills = response.json()["skills"]
     assert len(skills) <= 3
+
+
+def test_skills_accepts_sample_source():
+    """?source=sample must use the local sample job dataset."""
+    response = client.get("/skills?source=sample")
+    assert response.status_code == 200
+    assert "skills" in response.json()
+
+
+def test_skills_accepts_remoteok_source(monkeypatch):
+    """?source=remoteok must use RemoteOK jobs without making a live network call."""
+    fake_remoteok_jobs = [
+        {
+            "id": "remoteok_test_1",
+            "title": "Remote Data Engineer",
+            "company": "Test Company",
+            "description": "We use Python, SQL, and Docker.",
+            "location": "Remote",
+            "remote_type": "remote",
+            "source": "remoteok",
+            "source_url": "https://remoteok.com/test",
+            "posted_at": "2026-05-24",
+            "employment_type": "full-time",
+            "seniority": "senior",
+            "tags": ["python", "sql"],
+        }
+    ]
+
+    monkeypatch.setattr(skills_route, "fetch_remoteok_jobs", lambda: fake_remoteok_jobs)
+
+    response = client.get("/skills?source=remoteok&top_n=3")
+
+    assert response.status_code == 200
+    returned_skills = {item["skill"] for item in response.json()["skills"]}
+    assert "python" in returned_skills
+    assert "sql" in returned_skills
+
+
+def test_skills_invalid_source_returns_400():
+    """Unsupported sources must return a clear HTTP 400 error."""
+    response = client.get("/skills?source=linkedin")
+
+    assert response.status_code == 400
+    assert "Unsupported source" in response.json()["detail"]
 
 
 def test_skills_default_top_n_is_ten():
